@@ -299,19 +299,70 @@ async function fetchNFTs(address, contractAddress, chainId) {
         return;
       }
 
-      allNFTs = data.ownedNfts.map((nft) => ({
-        tokenId: nft.tokenId,
-        name: nft.name || "Token #" + nft.tokenId,
-        description: nft.description || "",
-        image: getImageUrl(nft.image),
-        collection:
-          nft.contract && nft.contract.name
-            ? nft.contract.name
-            : shortenAddr(nft.contract && nft.contract.address),
-        contractAddress: nft.contract && nft.contract.address,
-        attributes:
-          (nft.raw && nft.raw.metadata && nft.raw.metadata.attributes) || [],
-      }));
+      // @show all NFT ສຳຄັນ
+      allNFTs = await Promise.all(
+        data.ownedNfts.map(async (nft) => {
+          let txHash = null;
+          let issuedAt = null;
+
+          try {
+            const transferRes = await fetch(
+              `https://${
+                getNetworkInfo(chainNum).alchemy
+              }.g.alchemy.com/v2/${getAlchemyKey()}`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  jsonrpc: "2.0",
+                  method: "alchemy_getAssetTransfers",
+                  params: [
+                    {
+                      fromBlock: "0x0",
+                      toBlock: "latest",
+                      toAddress: address,
+                      contractAddresses: [nft.contract?.address],
+                      category: ["erc721"],
+                      withMetadata: true,
+                      maxCount: "0x64",
+                    },
+                  ],
+                  id: 1,
+                }),
+              }
+            );
+            const transferData = await transferRes.json();
+            const transfers = transferData.result?.transfers || [];
+            const match = transfers.find(
+              (t) =>
+                t.erc721TokenId &&
+                parseInt(t.erc721TokenId, 16) === parseInt(nft.tokenId)
+            );
+            if (match) {
+              txHash = match.hash;
+              // @time mint blockchain
+              issuedAt = match.metadata?.blockTimestamp
+                ? Math.floor(
+                    new Date(match.metadata.blockTimestamp).getTime() / 1000
+                  )
+                : null;
+            }
+          } catch (_) {}
+
+          return {
+            tokenId: nft.tokenId,
+            name: nft.name || "Token #" + nft.tokenId,
+            description: nft.description || "",
+            image: getImageUrl(nft.image),
+            collection:
+              nft.contract?.name || shortenAddr(nft.contract?.address),
+            contractAddress: nft.contract?.address,
+            attributes: nft.raw?.metadata?.attributes || [],
+            issuedAt, // @time mint
+            txHash, // @transaction hash
+          };
+        })
+      );
 
       showLoading(false);
       renderGrid(allNFTs);
@@ -550,6 +601,24 @@ function openModal(nft) {
     ethEl.rel = "noopener noreferrer";
   }
 
+  // Transaction Hash
+  const hashEl = document.getElementById("modalHash");
+  if (hashEl) {
+    if (nft.txHash) {
+      const short = `${nft.txHash.slice(0, 10)}...${nft.txHash.slice(-6)}`;
+      hashEl.textContent = short;
+      hashEl.style.cursor = "pointer";
+      hashEl.style.color = "#a78bfa";
+      hashEl.style.textDecoration = "underline";
+      hashEl.onclick = () =>
+        window.open(`https://sepolia.etherscan.io/tx/${nft.txHash}`, "_blank");
+    } else {
+      hashEl.textContent = "—";
+      hashEl.onclick = null;
+      hashEl.style.cursor = "default";
+      hashEl.style.textDecoration = "none";
+    }
+  }
   // @show Verification
   const verifiedEl = document.getElementById("modalVerified");
   if (verifiedEl) {
@@ -560,7 +629,27 @@ function openModal(nft) {
   // @show Token ID
   const tokenIdEL = document.getElementById("modalTokenId");
   if (tokenIdEL) {
-    tokenIdEL.textContent = `${nft.tokenId}`;
+    tokenIdEL.textContent =
+      nft.tokenId !== undefined && nft.tokenId !== null
+        ? `${nft.tokenId}`
+        : "-";
+  }
+
+  // @show times
+  const issuedAtEl = document.getElementById("modalIssuedAt");
+  if (issuedAtEl) {
+    if (nft.issuedAt) {
+      const date = new Date(Number(nft.issuedAt) * 1000);
+      issuedAtEl.textContent = date.toLocaleDateString("lo-LA", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } else {
+      issuedAtEl.textContent = "—";
+    }
   }
 
   document.getElementById("modal").classList.add("open");
