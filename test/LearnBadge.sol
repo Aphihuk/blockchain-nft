@@ -7,7 +7,7 @@ import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract LearnBadge is ERC721, ERC721URIStorage, Ownable {
+contract DevLaos is ERC721, ERC721URIStorage, Ownable {
 
 
     uint256 private _tokenIdCounter;
@@ -38,8 +38,8 @@ contract LearnBadge is ERC721, ERC721URIStorage, Ownable {
         string  activity
     );
 
-    // @Name: LearnBadge
-    constructor() ERC721("LearnBadge", "LBG") Ownable(msg.sender) {}
+    // @Name: DevLaos
+    constructor() ERC721("DevLaos", "DLS") Ownable(msg.sender) {}
 
 
     function mintBadge(
