@@ -165,8 +165,8 @@
     <div class="toast" id="toast"></div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
-    <script src="./script/index.js"></script>
-    <script src="./script/contract_address.js"></script>
+    <script src="./script/index_LABChain.js"></script>
+    <script src="./script/contract_address_LABChain.js"></script>
 
   </div>
 </body>

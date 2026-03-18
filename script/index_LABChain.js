@@ -1,3 +1,21 @@
+// @Chain ID
+// @contract address in deploy
+
+// ✅ แก้เป็น array วนลูป
+const CONTRACTS = [
+  {
+    address: "0x807D0Fa5F4860E24B23d0E5a34A83DdE6E079f16",
+    name: "LABchain",
+  },
+  {
+    address: "0xE76CAF6C344230f319D70f97F712a424E6b61B72",
+    name: "sepolia",
+  },
+];
+const CONTRACT_ADDRESS = CONTRACTS[0].address;
+
+const LABCHAIN_ID = "0xaa36a7";
+
 const PINATA_GATEWAY =
   "https://sapphire-hilarious-slug-96.mypinata.cloud/ipfs/";
 
@@ -147,7 +165,7 @@ async function uploadAll() {
         method: "POST",
         headers: { Authorization: `Bearer ${JWT}` },
         body: formData,
-      }
+      },
     );
     const imageData = await imageRes.json();
     const imageCID = imageData.IpfsHash;
@@ -178,7 +196,7 @@ async function uploadAll() {
           pinataMetadata: { name: "nf.json" },
           pinataContent: metadata,
         }),
-      }
+      },
     );
     const jsonData = await jsonRes.json();
     const jsonCID = jsonData.IpfsHash;
@@ -293,7 +311,7 @@ async function loadBadges() {
   } catch (e) {
     showStatus(
       "error",
-      "ບໍ່ສາມາດດືງ NFT ໄດ້\n" + (e.reason || e.message || "")
+      "ບໍ່ສາມາດດືງ NFT ໄດ້\n" + (e.reason || e.message || ""),
     );
   }
 }
@@ -376,7 +394,7 @@ async function mintBadge() {
   } catch (e) {
     setMintStatus(
       "error",
-      " " + (e.reason || e.message || "Transaction failed")
+      " " + (e.reason || e.message || "Transaction failed"),
     );
     toast(" Mint unsuccessful", "error");
   } finally {
@@ -390,16 +408,32 @@ function openModal(b) {
   document.getElementById("modalName").textContent = b.badgeName;
   document.getElementById("modalActivity").textContent = b.activity;
   document.getElementById("modalImgWrap").textContent = getBadgeEmoji(
-    b.badgeName
+    b.badgeName,
   );
   document.getElementById("modal").classList.add("open");
   const date = b.issuedAt
     ? new Date(b.issuedAt * 1000).toLocaleString("th-TH")
     : "—";
-  document.getElementById("modalMeta").innerHTML =
-    `Token ID: <span>#${b.tokenId}</span><br>` +
-    `ອອກວັນທີ່: <span>${date}</span><br>` +
-    `Network: <span>Sepolia Testnet</span>`;
+  provider.getNetwork().then((network) => {
+    const chainNames = {
+      1n: "Ethereum Mainnet",
+      11155111n: "Sepolia Testnet",
+      137n: "Polygon",
+      80002n: "Polygon Amoy",
+      10n: "Optimism",
+      42161n: "Arbitrum One",
+      8453n: "Base",
+      84532n: "Base Sepolia",
+      17000n: "Holesky",
+      5222n: "LAB Chain",
+    };
+    const networkName =
+      chainNames[network.chainId] || "Chain " + network.chainId;
+    document.getElementById("modalMeta").innerHTML =
+      `Token ID: <span>#${b.tokenId}</span><br>` +
+      `ອອກວັນທີ່: <span>${date}</span><br>` +
+      `Network: <span>${networkName}</span>`;
+  });
 }
 function closeModal(e) {
   if (e.target.id === "modal")
@@ -415,7 +449,7 @@ function switchTab(tab) {
   document.querySelectorAll(".tab").forEach((t, i) => {
     t.classList.toggle(
       "active",
-      (i === 0 && tab === "my") || (i === 1 && tab === "mint")
+      (i === 0 && tab === "my") || (i === 1 && tab === "mint"),
     );
   });
 }

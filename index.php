@@ -138,7 +138,8 @@
         </div>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
-    <script src="../script/Gallery.js"></script>
+    <script src="../script/Gallery_LABChain.js"></script>
+
 
 </body>
 

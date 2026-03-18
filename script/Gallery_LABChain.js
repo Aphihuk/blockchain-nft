@@ -1,7 +1,11 @@
 // @Chain ID
 // @contract address in deploy
 const LAB_CHAIN_ID = 5222;
-const LAB_CONTRACT_DEFAULT = "0xE76CAF6C344230f319D70f97F712a424E6b61B72";
+const LAB_CONTRACTS = [
+  { address: "0x807D0Fa5F4860E24B23d0E5a34A83DdE6E079f16", name: "LearnBadge" },
+  { address: "0xE76CAF6C344230f319D70f97F712a424E6b61B72", name: "OldBadge" },
+];
+const LAB_CONTRACT_DEFAULT = LAB_CONTRACTS[0].address; // fallback
 
 // @ຂໍ້ມູນ Network ທີ່ຮອງຮັບ ແລະ API Alchemy ສໍາລັບແຕ່ລະ Network
 const NETWORK_MAP = {
@@ -329,21 +333,21 @@ async function fetchNFTs(address, contractAddress, chainId) {
                   ],
                   id: 1,
                 }),
-              }
+              },
             );
             const transferData = await transferRes.json();
             const transfers = transferData.result?.transfers || [];
             const match = transfers.find(
               (t) =>
                 t.erc721TokenId &&
-                parseInt(t.erc721TokenId, 16) === parseInt(nft.tokenId)
+                parseInt(t.erc721TokenId, 16) === parseInt(nft.tokenId),
             );
             if (match) {
               txHash = match.hash;
               // @time mint blockchain
               issuedAt = match.metadata?.blockTimestamp
                 ? Math.floor(
-                    new Date(match.metadata.blockTimestamp).getTime() / 1000
+                    new Date(match.metadata.blockTimestamp).getTime() / 1000,
                   )
                 : null;
             }
@@ -361,7 +365,7 @@ async function fetchNFTs(address, contractAddress, chainId) {
             issuedAt, // @time mint
             txHash, // @transaction hash
           };
-        })
+        }),
       );
 
       showLoading(false);
@@ -421,8 +425,39 @@ async function fetchFromLabChain(address, contractAddress) {
     for (const tid of tokenIds) {
       try {
         const b = await contract.badges(tid);
+        let txHash = null;
         let image = null;
         let description = b.activity || "";
+
+        try {
+          const res = await fetch("https://rpc.labchain.la", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              method: "eth_getLogs",
+              params: [
+                {
+                  fromBlock: "0x0",
+                  toBlock: "latest",
+                  address: contractAddr,
+                  topics: [
+                    ethers.id("Transfer(address,address,uint256)"),
+                    null,
+                    ethers.zeroPadValue(address, 32),
+                    ethers.zeroPadValue(ethers.toBeHex(tid), 32),
+                  ],
+                },
+              ],
+              id: 1,
+            }),
+          });
+          const data = await res.json();
+          const logs = data.result || [];
+          if (logs.length > 0) {
+            txHash = logs[logs.length - 1].transactionHash;
+          }
+        } catch (_) {}
 
         try {
           const uri = await contract.tokenURI(tid);
@@ -440,6 +475,8 @@ async function fetchFromLabChain(address, contractAddress) {
           collection: "LAB Chain",
           contractAddress: contractAddr,
           attributes: [],
+          issuedAt: Number(b.issuedAt) || null,
+          txHash: txHash,
         });
       } catch (_) {
         allNFTs.push({
@@ -450,6 +487,8 @@ async function fetchFromLabChain(address, contractAddress) {
           collection: "LAB Chain",
           contractAddress: contractAddr,
           attributes: [],
+          issuedAt: null,
+          txHash: null,
         });
       }
     }
@@ -461,7 +500,7 @@ async function fetchFromLabChain(address, contractAddress) {
     showLoading(false);
     showStatus(
       "ດືງຂໍ້ມູນຈາກ LAB Chain ບໍ່ສຳເລັດ\n" + (err.message || ""),
-      true
+      true,
     );
   }
 }
@@ -471,7 +510,7 @@ async function fetchFromOpenSea(address, contractAddress, osChain) {
     showLoading(false);
     showStatus(
       'Network ບໍ່ຮອງຮັບ\nກະລຸນາເລືອກ Network  Contract Address  "ດືງ NFT" ຂອງ OpenSea',
-      true
+      true,
     );
     return;
   }
@@ -509,6 +548,8 @@ async function fetchFromOpenSea(address, contractAddress, osChain) {
       collection: nft.collection || shortenAddr(nft.contract),
       contractAddress: nft.contract,
       attributes: nft.traits || [],
+      issuedAt: null,
+      txHash: null,
     }));
 
     showLoading(false);
@@ -569,6 +610,7 @@ function renderGrid(nfts) {
 
 // @open NFT ໃນ Modal
 function openModal(nft) {
+  console.log("txHash:", nft.txHash);
   document.getElementById("modalName").textContent = nft.name;
   document.getElementById("modalCollection").textContent = nft.collection;
   document.getElementById("modalDesc").textContent =
@@ -596,7 +638,23 @@ function openModal(nft) {
     const ethAddr = nft.contractAddress || LAB_CONTRACT_DEFAULT;
     ethEl.textContent = `${ethAddr.slice(0, 10)}...${ethAddr.slice(-6)}`;
     ethEl.title = ethAddr;
-    ethEl.href = `https://sepolia.etherscan.io/address/${ethAddr}`;
+    const netInfo = getNetworkInfo(currentChainId);
+    const explorerBase = {
+      1: `https://etherscan.io/address/${ethAddr}`,
+      11155111: `https://sepolia.etherscan.io/address/${ethAddr}`,
+      137: `https://polygonscan.com/address/${ethAddr}`,
+      80002: `https://amoy.polygonscan.com/address/${ethAddr}`,
+      10: `https://optimistic.etherscan.io/address/${ethAddr}`,
+      42161: `https://arbiscan.io/address/${ethAddr}`,
+      8453: `https://basescan.org/address/${ethAddr}`,
+      84532: `https://sepolia.basescan.org/address/${ethAddr}`,
+      17000: `https://holesky.etherscan.io/address/${ethAddr}`,
+      5222: `https://explorer.labchain.la/address/${ethAddr}?tab=txs`,
+    };
+
+    ethEl.href =
+      explorerBase[currentChainId] ||
+      `https://sepolia.etherscan.io/address/${ethAddr}`;
     ethEl.target = "_blank";
     ethEl.rel = "noopener noreferrer";
   }
@@ -610,8 +668,23 @@ function openModal(nft) {
       hashEl.style.cursor = "pointer";
       hashEl.style.color = "#a78bfa";
       hashEl.style.textDecoration = "underline";
-      hashEl.onclick = () =>
-        window.open(`https://sepolia.etherscan.io/tx/${nft.txHash}`, "_blank");
+      const txExplorer = {
+        1: `https://etherscan.io/tx/${nft.txHash}`,
+        11155111: `https://sepolia.etherscan.io/tx/${nft.txHash}`,
+        137: `https://polygonscan.com/tx/${nft.txHash}`,
+        80002: `https://amoy.polygonscan.com/tx/${nft.txHash}`,
+        10: `https://optimistic.etherscan.io/tx/${nft.txHash}`,
+        42161: `https://arbiscan.io/tx/${nft.txHash}`,
+        8453: `https://basescan.org/tx/${nft.txHash}`,
+        84532: `https://sepolia.basescan.org/tx/${nft.txHash}`,
+        17000: `https://holesky.etherscan.io/tx/${nft.txHash}`,
+        5222: `https://explorer.labchain.la/tx/${nft.txHash}`,
+      };
+
+      const txUrl =
+        txExplorer[currentChainId] ||
+        `https://sepolia.etherscan.io/tx/${nft.txHash}`;
+      hashEl.onclick = () => window.open(txUrl, "_blank");
     } else {
       hashEl.textContent = "—";
       hashEl.onclick = null;
@@ -631,8 +704,8 @@ function openModal(nft) {
   if (tokenIdEL) {
     tokenIdEL.textContent =
       nft.tokenId !== undefined && nft.tokenId !== null
-        ? `${nft.tokenId}`
-        : "-";
+        ? `#${nft.tokenId}`
+        : "—";
   }
 
   // @show times
