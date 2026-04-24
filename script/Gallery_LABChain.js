@@ -2,8 +2,8 @@
 // @contract address in deploy
 const LAB_CHAIN_ID = 5222;
 const LAB_CONTRACTS = [
-  { address: "0x807D0Fa5F4860E24B23d0E5a34A83DdE6E079f16", name: "LearnBadge" },
-  { address: "0xE76CAF6C344230f319D70f97F712a424E6b61B72", name: "OldBadge" },
+  { address: "0x807D0Fa5F4860E24B23d0E5a34A83DdE6E079f16", name: "LABchain" },
+  { address: "0xE76CAF6C344230f319D70f97F712a424E6b61B72", name: "sepolia" },
 ];
 const LAB_CONTRACT_DEFAULT = LAB_CONTRACTS[0].address; // fallback
 
@@ -344,7 +344,6 @@ async function fetchNFTs(address, contractAddress, chainId) {
             );
             if (match) {
               txHash = match.hash;
-              // @time mint blockchain
               issuedAt = match.metadata?.blockTimestamp
                 ? Math.floor(
                     new Date(match.metadata.blockTimestamp).getTime() / 1000,
@@ -362,8 +361,8 @@ async function fetchNFTs(address, contractAddress, chainId) {
               nft.contract?.name || shortenAddr(nft.contract?.address),
             contractAddress: nft.contract?.address,
             attributes: nft.raw?.metadata?.attributes || [],
-            issuedAt, // @time mint
-            txHash, // @transaction hash
+            issuedAt,
+            txHash,
           };
         }),
       );
@@ -428,9 +427,55 @@ async function fetchFromLabChain(address, contractAddress) {
         let txHash = null;
         let image = null;
         let description = b.activity || "";
-
+        // Step 1: ໃຊ້ issuedAt timestamp ຫາ block ທີ່ mint
         try {
-          const res = await fetch("https://rpc.labchain.la", {
+          const issuedTimestamp = Number(b.issuedAt);
+
+          // Step 2: ຫາ block ໂດຍ binary search timestamp
+          async function getBlockByTimestamp(targetTs, latest) {
+            let lo = 1,
+              hi = latest;
+            while (lo < hi) {
+              const mid = Math.floor((lo + hi) / 2);
+              const res = await fetch("https://rpc.labchain.la", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  jsonrpc: "2.0",
+                  method: "eth_getBlockByNumber",
+                  params: ["0x" + mid.toString(16), false],
+                  id: 1,
+                }),
+              });
+              const data = await res.json();
+              const blockTs = parseInt(data.result?.timestamp, 16);
+              if (blockTs < targetTs) lo = mid + 1;
+              else hi = mid;
+            }
+            return lo;
+          }
+
+          const latestRes = await fetch("https://rpc.labchain.la", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              method: "eth_blockNumber",
+              params: [],
+              id: 1,
+            }),
+          });
+          const latestData = await latestRes.json();
+          const latestBlock = parseInt(latestData.result, 16);
+
+          const mintBlock = await getBlockByTimestamp(
+            issuedTimestamp,
+            latestBlock,
+          );
+          const fromBlock = Math.max(1, mintBlock - 500);
+          const toBlock = mintBlock + 500;
+
+          const logsRes = await fetch("https://rpc.labchain.la", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -438,26 +483,23 @@ async function fetchFromLabChain(address, contractAddress) {
               method: "eth_getLogs",
               params: [
                 {
-                  fromBlock: "0x0",
-                  toBlock: "latest",
+                  fromBlock: "0x" + fromBlock.toString(16),
+                  toBlock: "0x" + toBlock.toString(16),
                   address: contractAddr,
-                  topics: [
-                    ethers.id("Transfer(address,address,uint256)"),
-                    null,
-                    ethers.zeroPadValue(address, 32),
-                    ethers.zeroPadValue(ethers.toBeHex(tid), 32),
-                  ],
+                  topics: [ethers.id("Transfer(address,address,uint256)")],
                 },
               ],
-              id: 1,
+              id: 2,
             }),
           });
-          const data = await res.json();
-          const logs = data.result || [];
-          if (logs.length > 0) {
-            txHash = logs[logs.length - 1].transactionHash;
-          }
-        } catch (_) {}
+          const logsData = await logsRes.json();
+          const logs = logsData.result || [];
+
+          const match = logs.find(
+            (log) => log.topics[3] && BigInt(log.topics[3]) === BigInt(tid),
+          );
+          if (match) txHash = match.transactionHash;
+        } catch (e) {}
 
         try {
           const uri = await contract.tokenURI(tid);

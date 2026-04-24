@@ -1,7 +1,6 @@
 // @Chain ID
 // @contract address in deploy
 
-// ✅ แก้เป็น array วนลูป
 const CONTRACTS = [
   {
     address: "0x807D0Fa5F4860E24B23d0E5a34A83DdE6E079f16",
