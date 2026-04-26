@@ -1,7 +1,11 @@
 // @Chain ID
 // @contract address in deploy
 const LAB_CHAIN_ID = 5222;
-const LAB_CONTRACT_DEFAULT = "0xE76CAF6C344230f319D70f97F712a424E6b61B72";
+const LAB_CONTRACTS = [
+  { address: "0x807D0Fa5F4860E24B23d0E5a34A83DdE6E079f16", name: "LABchain" },
+  { address: "0xE76CAF6C344230f319D70f97F712a424E6b61B72", name: "sepolia" },
+];
+const LAB_CONTRACT_DEFAULT = LAB_CONTRACTS[0].address; // fallback
 
 // @ຂໍ້ມູນ Network ທີ່ຮອງຮັບ ແລະ API Alchemy ສໍາລັບແຕ່ລະ Network
 const NETWORK_MAP = {
@@ -299,19 +303,69 @@ async function fetchNFTs(address, contractAddress, chainId) {
         return;
       }
 
-      allNFTs = data.ownedNfts.map((nft) => ({
-        tokenId: nft.tokenId,
-        name: nft.name || "Token #" + nft.tokenId,
-        description: nft.description || "",
-        image: getImageUrl(nft.image),
-        collection:
-          nft.contract && nft.contract.name
-            ? nft.contract.name
-            : shortenAddr(nft.contract && nft.contract.address),
-        contractAddress: nft.contract && nft.contract.address,
-        attributes:
-          (nft.raw && nft.raw.metadata && nft.raw.metadata.attributes) || [],
-      }));
+      // @show all NFT ສຳຄັນ
+      allNFTs = await Promise.all(
+        data.ownedNfts.map(async (nft) => {
+          let txHash = null;
+          let issuedAt = null;
+
+          try {
+            const transferRes = await fetch(
+              `https://${
+                getNetworkInfo(chainNum).alchemy
+              }.g.alchemy.com/v2/${getAlchemyKey()}`,
+              {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  jsonrpc: "2.0",
+                  method: "alchemy_getAssetTransfers",
+                  params: [
+                    {
+                      fromBlock: "0x0",
+                      toBlock: "latest",
+                      toAddress: address,
+                      contractAddresses: [nft.contract?.address],
+                      category: ["erc721"],
+                      withMetadata: true,
+                      maxCount: "0x64",
+                    },
+                  ],
+                  id: 1,
+                }),
+              },
+            );
+            const transferData = await transferRes.json();
+            const transfers = transferData.result?.transfers || [];
+            const match = transfers.find(
+              (t) =>
+                t.erc721TokenId &&
+                parseInt(t.erc721TokenId, 16) === parseInt(nft.tokenId),
+            );
+            if (match) {
+              txHash = match.hash;
+              issuedAt = match.metadata?.blockTimestamp
+                ? Math.floor(
+                    new Date(match.metadata.blockTimestamp).getTime() / 1000,
+                  )
+                : null;
+            }
+          } catch (_) {}
+
+          return {
+            tokenId: nft.tokenId,
+            name: nft.name || "Token #" + nft.tokenId,
+            description: nft.description || "",
+            image: getImageUrl(nft.image),
+            collection:
+              nft.contract?.name || shortenAddr(nft.contract?.address),
+            contractAddress: nft.contract?.address,
+            attributes: nft.raw?.metadata?.attributes || [],
+            issuedAt,
+            txHash,
+          };
+        }),
+      );
 
       showLoading(false);
       renderGrid(allNFTs);
@@ -370,8 +424,82 @@ async function fetchFromLabChain(address, contractAddress) {
     for (const tid of tokenIds) {
       try {
         const b = await contract.badges(tid);
+        let txHash = null;
         let image = null;
         let description = b.activity || "";
+        // Step 1: ໃຊ້ issuedAt timestamp ຫາ block ທີ່ mint
+        try {
+          const issuedTimestamp = Number(b.issuedAt);
+
+          // Step 2: ຫາ block ໂດຍ binary search timestamp
+          async function getBlockByTimestamp(targetTs, latest) {
+            let lo = 1,
+              hi = latest;
+            while (lo < hi) {
+              const mid = Math.floor((lo + hi) / 2);
+              const res = await fetch("https://rpc.labchain.la", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  jsonrpc: "2.0",
+                  method: "eth_getBlockByNumber",
+                  params: ["0x" + mid.toString(16), false],
+                  id: 1,
+                }),
+              });
+              const data = await res.json();
+              const blockTs = parseInt(data.result?.timestamp, 16);
+              if (blockTs < targetTs) lo = mid + 1;
+              else hi = mid;
+            }
+            return lo;
+          }
+
+          const latestRes = await fetch("https://rpc.labchain.la", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              method: "eth_blockNumber",
+              params: [],
+              id: 1,
+            }),
+          });
+          const latestData = await latestRes.json();
+          const latestBlock = parseInt(latestData.result, 16);
+
+          const mintBlock = await getBlockByTimestamp(
+            issuedTimestamp,
+            latestBlock,
+          );
+          const fromBlock = Math.max(1, mintBlock - 500);
+          const toBlock = mintBlock + 500;
+
+          const logsRes = await fetch("https://rpc.labchain.la", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              jsonrpc: "2.0",
+              method: "eth_getLogs",
+              params: [
+                {
+                  fromBlock: "0x" + fromBlock.toString(16),
+                  toBlock: "0x" + toBlock.toString(16),
+                  address: contractAddr,
+                  topics: [ethers.id("Transfer(address,address,uint256)")],
+                },
+              ],
+              id: 2,
+            }),
+          });
+          const logsData = await logsRes.json();
+          const logs = logsData.result || [];
+
+          const match = logs.find(
+            (log) => log.topics[3] && BigInt(log.topics[3]) === BigInt(tid),
+          );
+          if (match) txHash = match.transactionHash;
+        } catch (e) {}
 
         try {
           const uri = await contract.tokenURI(tid);
@@ -389,6 +517,8 @@ async function fetchFromLabChain(address, contractAddress) {
           collection: "LAB Chain",
           contractAddress: contractAddr,
           attributes: [],
+          issuedAt: Number(b.issuedAt) || null,
+          txHash: txHash,
         });
       } catch (_) {
         allNFTs.push({
@@ -399,6 +529,8 @@ async function fetchFromLabChain(address, contractAddress) {
           collection: "LAB Chain",
           contractAddress: contractAddr,
           attributes: [],
+          issuedAt: null,
+          txHash: null,
         });
       }
     }
@@ -410,7 +542,7 @@ async function fetchFromLabChain(address, contractAddress) {
     showLoading(false);
     showStatus(
       "ດືງຂໍ້ມູນຈາກ LAB Chain ບໍ່ສຳເລັດ\n" + (err.message || ""),
-      true
+      true,
     );
   }
 }
@@ -420,7 +552,7 @@ async function fetchFromOpenSea(address, contractAddress, osChain) {
     showLoading(false);
     showStatus(
       'Network ບໍ່ຮອງຮັບ\nກະລຸນາເລືອກ Network  Contract Address  "ດືງ NFT" ຂອງ OpenSea',
-      true
+      true,
     );
     return;
   }
@@ -458,6 +590,8 @@ async function fetchFromOpenSea(address, contractAddress, osChain) {
       collection: nft.collection || shortenAddr(nft.contract),
       contractAddress: nft.contract,
       attributes: nft.traits || [],
+      issuedAt: null,
+      txHash: null,
     }));
 
     showLoading(false);
@@ -518,6 +652,7 @@ function renderGrid(nfts) {
 
 // @open NFT ໃນ Modal
 function openModal(nft) {
+  console.log("txHash:", nft.txHash);
   document.getElementById("modalName").textContent = nft.name;
   document.getElementById("modalCollection").textContent = nft.collection;
   document.getElementById("modalDesc").textContent =
@@ -545,11 +680,60 @@ function openModal(nft) {
     const ethAddr = nft.contractAddress || LAB_CONTRACT_DEFAULT;
     ethEl.textContent = `${ethAddr.slice(0, 10)}...${ethAddr.slice(-6)}`;
     ethEl.title = ethAddr;
-    ethEl.href = `https://sepolia.etherscan.io/address/${ethAddr}`;
+    const netInfo = getNetworkInfo(currentChainId);
+    const explorerBase = {
+      1: `https://etherscan.io/address/${ethAddr}`,
+      11155111: `https://sepolia.etherscan.io/address/${ethAddr}`,
+      137: `https://polygonscan.com/address/${ethAddr}`,
+      80002: `https://amoy.polygonscan.com/address/${ethAddr}`,
+      10: `https://optimistic.etherscan.io/address/${ethAddr}`,
+      42161: `https://arbiscan.io/address/${ethAddr}`,
+      8453: `https://basescan.org/address/${ethAddr}`,
+      84532: `https://sepolia.basescan.org/address/${ethAddr}`,
+      17000: `https://holesky.etherscan.io/address/${ethAddr}`,
+      5222: `https://explorer.labchain.la/address/${ethAddr}?tab=txs`,
+    };
+
+    ethEl.href =
+      explorerBase[currentChainId] ||
+      `https://sepolia.etherscan.io/address/${ethAddr}`;
     ethEl.target = "_blank";
     ethEl.rel = "noopener noreferrer";
   }
 
+  // Transaction Hash
+  const hashEl = document.getElementById("modalHash");
+  if (hashEl) {
+    if (nft.txHash) {
+      const short = `${nft.txHash.slice(0, 10)}...${nft.txHash.slice(-6)}`;
+      hashEl.textContent = short;
+      hashEl.style.cursor = "pointer";
+      hashEl.style.color = "#a78bfa";
+      hashEl.style.textDecoration = "underline";
+      const txExplorer = {
+        1: `https://etherscan.io/tx/${nft.txHash}`,
+        11155111: `https://sepolia.etherscan.io/tx/${nft.txHash}`,
+        137: `https://polygonscan.com/tx/${nft.txHash}`,
+        80002: `https://amoy.polygonscan.com/tx/${nft.txHash}`,
+        10: `https://optimistic.etherscan.io/tx/${nft.txHash}`,
+        42161: `https://arbiscan.io/tx/${nft.txHash}`,
+        8453: `https://basescan.org/tx/${nft.txHash}`,
+        84532: `https://sepolia.basescan.org/tx/${nft.txHash}`,
+        17000: `https://holesky.etherscan.io/tx/${nft.txHash}`,
+        5222: `https://explorer.labchain.la/tx/${nft.txHash}`,
+      };
+
+      const txUrl =
+        txExplorer[currentChainId] ||
+        `https://sepolia.etherscan.io/tx/${nft.txHash}`;
+      hashEl.onclick = () => window.open(txUrl, "_blank");
+    } else {
+      hashEl.textContent = "—";
+      hashEl.onclick = null;
+      hashEl.style.cursor = "default";
+      hashEl.style.textDecoration = "none";
+    }
+  }
   // @show Verification
   const verifiedEl = document.getElementById("modalVerified");
   if (verifiedEl) {
@@ -560,7 +744,27 @@ function openModal(nft) {
   // @show Token ID
   const tokenIdEL = document.getElementById("modalTokenId");
   if (tokenIdEL) {
-    tokenIdEL.textContent = `${nft.tokenId}`;
+    tokenIdEL.textContent =
+      nft.tokenId !== undefined && nft.tokenId !== null
+        ? `#${nft.tokenId}`
+        : "—";
+  }
+
+  // @show times
+  const issuedAtEl = document.getElementById("modalIssuedAt");
+  if (issuedAtEl) {
+    if (nft.issuedAt) {
+      const date = new Date(Number(nft.issuedAt) * 1000);
+      issuedAtEl.textContent = date.toLocaleDateString("lo-LA", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+    } else {
+      issuedAtEl.textContent = "—";
+    }
   }
 
   document.getElementById("modal").classList.add("open");

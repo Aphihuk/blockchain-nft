@@ -91,6 +91,14 @@
 
                 <div class="modal-verify">
                     <h4>Verification</h4>
+                    <div class="modal-verify-row">
+                        <span class="vkey">ວັນທີ່ໄດ້ຮັບ</span>
+                        <span id="modalIssuedAt">—</span>
+                    </div>
+                    <div class="modal-verify-row">
+                        <span class="vkey"> Contract Hash</span>
+                        <span id="modalHash">loading...</span>
+                    </div>
 
                     <div class="modal-verify-row">
                         <span class="vkey"> Contract Verified</span>
@@ -130,7 +138,8 @@
         </div>
     </div>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
-    <script src="../script/Gallery.js"></script>
+    <script src="../script/Gallery_LABChain.js"></script>
+
 
 </body>
 
