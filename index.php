@@ -19,7 +19,7 @@
             <span class="dot"></span>
             <span id="networkName">—</span>
         </div>
-        <button id="alchemyBtn" onclick="openAlchemyModal()">🔑 Connect Alchemy</button>
+        <button id="alchemyBtn" onclick="openAlchemyModal()"> Connect Alchemy</button>
     </header>
 
 
@@ -59,7 +59,7 @@
                 </div>
             </div>
         </div>
-
+    
         <div id="contractForm" style="display:none;">
             <h3>ດືງ NFT ຈາກ Contract Address (ບໍ່ບັງຄັບ)</h3>
             <div class="input-row">

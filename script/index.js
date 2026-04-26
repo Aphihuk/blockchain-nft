@@ -106,13 +106,13 @@ function saveJWT() {
 function clearJWT() {
   clearCookie("jwt");
   document.getElementById("jwtInput").value = "";
-  document.getElementById("pinataStatus").textContent = "Clear";
+  document.getElementById("pinataStatus").textContent = " Pinata ແລະClear";
   document.getElementById("pinataStatus").style.color = "#888";
   document.getElementById("pinataBtn").textContent = "🔑 Connect Pinata";
   document.getElementById("pinataBtn").classList.remove("connected");
 }
 
-// @upload ແລະ ສ້າງ Metadata JSON ສຳລັບ Mint ໃນ Pinata ແລະ ຮັບ URL ກັບໄປ
+// @upload ແລະ ສ້າງ Metadata JSON ສຳລັບ Mint ໃນ ຮັບ URL ກັບໄປ
 async function uploadAll() {
   const JWT = getCookie("jwt");
   if (!JWT) {
