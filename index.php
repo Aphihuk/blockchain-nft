@@ -1,3 +1,10 @@
+<?php
+require_once __DIR__ . '/auth/auth_guard.php';
+$userName  = htmlspecialchars($_SESSION['displayName'] ?? 'User');
+$userEmail = htmlspecialchars($_SESSION['email'] ?? '');
+$userPhoto = htmlspecialchars($_SESSION['photoUrl'] ?? '');
+$initials  = strtoupper(substr($userName, 0, 1));
+?>
 <!DOCTYPE html>
 <html lang="th">
 
@@ -9,19 +16,56 @@
         href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;700;800&display=swap"
         rel="stylesheet">
     <link rel="stylesheet" href="./css/index.css">
+    <link rel="stylesheet" href="./css/auth.css">
 </head>
 
 <body>
 
-    <header>
+    <!-- User info strip -->
+    <div id="userBar" style="
+      position:fixed; top:0; left:0; right:0; z-index:9999;
+      background:rgba(10,10,15,0.85); backdrop-filter:blur(16px);
+      border-bottom:1px solid rgba(255,255,255,0.07);
+      display:flex; align-items:center; justify-content:flex-end;
+      gap:.75rem; padding:.55rem 1.5rem;
+      font-family:'Inter',sans-serif; font-size:.85rem; color:rgba(241,245,249,.65);
+    ">
+      <?php if ($userPhoto): ?>
+        <img src="<?= $userPhoto ?>" alt="avatar"
+             style="width:28px;height:28px;border-radius:50%;object-fit:cover;border:2px solid rgba(167,139,250,.4);">
+      <?php else: ?>
+        <div class="user-avatar" style="width:28px;height:28px;font-size:.75rem;"><?= $initials ?></div>
+      <?php endif; ?>
+      <span><?= $userName ?></span>
+      <span style="color:rgba(255,255,255,.2);">|</span>
+      <a href="/auth/logout.php"
+         style="color:#f87171;text-decoration:none;font-weight:600;transition:color .2s;"
+         onmouseover="this.style.color='#fca5a5'" onmouseout="this.style.color='#f87171'"
+         id="logoutLink">Sign out</a>
+    </div>
+
+    <header style="margin-top:44px;">
         <div class="logo">NFT<span>.</span>Gallery</div>
         <div class="network-badge">
             <span class="dot"></span>
             <span id="networkName">—</span>
         </div>
-        <button id="alchemyBtn" onclick="openAlchemyModal()"> Connect Alchemy</button>
+        <div style="display:flex; gap:1rem; align-items:center;">
+            <button id="pricingBtn" onclick="window.location.href='/pricing.php'" style="
+                background:linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+                color:white;
+                border:none;
+                padding:0.5rem 1rem;
+                border-radius:8px;
+                cursor:pointer;
+                font-weight:600;
+                transition:all 0.3s ease;
+            " onmouseover="this.style.transform='translateY(-2px)'" onmouseout="this.style.transform='translateY(0)'">
+                <i class="fas fa-tags"></i> Pricing
+            </button>
+            <button id="alchemyBtn" onclick="openAlchemyModal()"> Connect Alchemy</button>
+        </div>
     </header>
-
 
     <div class="hero" id="heroSection">
         <h1>YOUR<br><span class="gradient">NFT GALLERY</span></h1>

@@ -75,6 +75,23 @@
       <div id="tabMint" class="section" style="display:none;">
         <div class="section-title">ອອກໃບຢັ້ງຢືນໃໝ່</div>
         <div class="section-sub"> ສະເພາະ admin/owner ເທົ່ານັ້ນທີ່ມີສິດ</div>
+        
+        <!-- Pricing Plan Display -->
+        <div id="selectedPlan" style="display:none; background: rgba(167, 139, 250, 0.1); border: 1px solid rgba(167, 139, 250, 0.3); border-radius: 12px; padding: 20px; margin-bottom: 2rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <div>
+              <div style="font-size: 1.2rem; font-weight: 600; color: #f8fafc; margin-bottom: 5px;">
+                <i class="fas fa-crown" style="color: #fbbf24;"></i> 
+                <span id="planName">Selected Plan</span>
+              </div>
+              <div style="color: #94a3b8; font-size: 0.9rem;" id="planDescription">Plan description</div>
+            </div>
+            <div style="text-align: right;">
+              <div style="font-size: 2rem; font-weight: 700; color: #f8fafc;" id="planPrice">$0</div>
+              <div style="color: #94a3b8; font-size: 0.8rem;">per certificate</div>
+            </div>
+          </div>
+        </div>
 
         <div class="mint-form">
 
@@ -167,6 +184,114 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
     <script src="./script/index_LABChain.js"></script>
     <script src="./script/contract_address_LABChain.js"></script>
+    
+    <script>
+        // Pricing plan configuration
+        const pricingPlans = {
+            basic: {
+                name: 'Basic Plan',
+                description: 'Perfect for individuals and small projects',
+                price: '$5',
+                features: ['Standard designs', 'Blockchain verification', 'IPFS storage', 'Email delivery']
+            },
+            professional: {
+                name: 'Professional Plan',
+                description: 'Ideal for educational institutions and businesses',
+                price: '$15',
+                features: ['Premium designs', 'Custom branding', 'Priority support', 'Lifetime validity']
+            },
+            enterprise: {
+                name: 'Enterprise Plan',
+                description: 'For large organizations with high volume needs',
+                price: '$50',
+                features: ['Custom designs', 'Bulk creation', '24/7 support', 'Full customization']
+            }
+        };
+
+        // Detect and display selected plan from URL
+        function detectSelectedPlan() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const plan = urlParams.get('plan');
+            
+            if (plan && pricingPlans[plan]) {
+                const planInfo = pricingPlans[plan];
+                const planDisplay = document.getElementById('selectedPlan');
+                const planName = document.getElementById('planName');
+                const planDescription = document.getElementById('planDescription');
+                const planPrice = document.getElementById('planPrice');
+                
+                planDisplay.style.display = 'block';
+                planName.textContent = planInfo.name;
+                planDescription.textContent = planInfo.description;
+                planPrice.textContent = planInfo.price;
+                
+                // Show notification
+                showToast(`${planInfo.name} selected - ${planInfo.price} per certificate`, 'success');
+                
+                // Auto-switch to mint tab
+                setTimeout(() => {
+                    switchTab('mint');
+                }, 1000);
+            }
+        }
+
+        // Enhanced mint function with pricing integration
+        function mintBadge() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const plan = urlParams.get('plan');
+            
+            if (!plan) {
+                showToast('Please select a pricing plan first', 'warning');
+                window.location.href = '/pricing.php';
+                return;
+            }
+            
+            // Call original mint function
+            if (typeof originalMintBadge === 'function') {
+                originalMintBadge();
+            } else {
+                // Fallback mint logic
+                const mintTo = document.getElementById('mintTo').value;
+                const mintName = document.getElementById('mintName').value;
+                const mintActivity = document.getElementById('mintActivity').value;
+                const mintURI = document.getElementById('mintURI').value;
+                
+                if (!mintTo || !mintName || !mintURI) {
+                    showToast('Please fill in all required fields', 'error');
+                    return;
+                }
+                
+                // Proceed with minting
+                console.log('Minting with plan:', plan);
+                // Add your original minting logic here
+            }
+        }
+
+        // Initialize plan detection on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            detectSelectedPlan();
+            
+            // Store original mint function if it exists
+            if (typeof window.mintBadge === 'function') {
+                window.originalMintBadge = window.mintBadge;
+            }
+            
+            // Override mint function
+            window.mintBadge = mintBadge;
+        });
+
+        // Toast notification function (if not already defined)
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast');
+            if (toast) {
+                toast.textContent = message;
+                toast.className = `toast show ${type}`;
+                setTimeout(() => {
+                    toast.className = 'toast';
+                }, 3000);
+            }
+        }
+    </script>
 
   </div>
 </body>
